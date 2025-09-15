@@ -69,12 +69,18 @@ model:
   train_predictor: True
   train_decoder: True
 
-debug: False 
+lora:
+  enabled: false
+  rank: 4
+  alpha: 1.0
+  dropout: 0.0
+
+debug: False
 
 # Planning params for planning eval jobs launched during training
-plan_settings: 
+plan_settings:
   # plan_cfg_path: conf/plan.yaml # set to null for no planning evals
-  plan_cfg_path: null 
+  plan_cfg_path: null
   planner: ['gd', 'cem']
   goal_source: ['dset', 'random_state']
   goal_H: [5]

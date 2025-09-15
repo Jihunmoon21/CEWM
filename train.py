@@ -22,6 +22,7 @@ from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor
 from metrics.image_metrics import eval_images
 from utils import slice_trajdict_with_t, cfg_to_dict, seed, sample_tensors
+from models.lora import add_lora_to_linear_layers
 
 warnings.filterwarnings("ignore")
 log = logging.getLogger(__name__)
@@ -289,6 +290,28 @@ class Trainer:
             if not self.train_decoder:
                 for param in self.decoder.parameters():
                     param.requires_grad = False
+        if getattr(self.cfg, "lora", None) and self.cfg.lora.enabled:
+            add_lora_to_linear_layers(
+                self.encoder,
+                r=self.cfg.lora.rank,
+                alpha=self.cfg.lora.alpha,
+                dropout=self.cfg.lora.dropout,
+            )
+            if self.cfg.has_predictor and self.predictor is not None:
+                add_lora_to_linear_layers(
+                    self.predictor,
+                    r=self.cfg.lora.rank,
+                    alpha=self.cfg.lora.alpha,
+                    dropout=self.cfg.lora.dropout,
+                )
+            if self.cfg.has_decoder and self.decoder is not None:
+                add_lora_to_linear_layers(
+                    self.decoder,
+                    r=self.cfg.lora.rank,
+                    alpha=self.cfg.lora.alpha,
+                    dropout=self.cfg.lora.dropout,
+                )
+
         self.encoder, self.predictor, self.decoder = self.accelerator.prepare(
             self.encoder, self.predictor, self.decoder
         )
@@ -308,13 +331,13 @@ class Trainer:
 
     def init_optimizers(self):
         self.encoder_optimizer = torch.optim.Adam(
-            self.encoder.parameters(),
+            filter(lambda p: p.requires_grad, self.encoder.parameters()),
             lr=self.cfg.training.encoder_lr,
         )
         self.encoder_optimizer = self.accelerator.prepare(self.encoder_optimizer)
         if self.cfg.has_predictor:
             self.predictor_optimizer = torch.optim.AdamW(
-                self.predictor.parameters(),
+                filter(lambda p: p.requires_grad, self.predictor.parameters()),
                 lr=self.cfg.training.predictor_lr,
             )
             self.predictor_optimizer = self.accelerator.prepare(
@@ -333,7 +356,8 @@ class Trainer:
 
         if self.cfg.has_decoder:
             self.decoder_optimizer = torch.optim.Adam(
-                self.decoder.parameters(), lr=self.cfg.training.decoder_lr
+                filter(lambda p: p.requires_grad, self.decoder.parameters()),
+                lr=self.cfg.training.decoder_lr,
             )
             self.decoder_optimizer = self.accelerator.prepare(self.decoder_optimizer)
 
